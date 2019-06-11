@@ -1,3 +1,5 @@
+Our Kaggle is https://www.kaggle.com/melkhouly/movie-recom
+
 The server is "testvm" on https://console.cloud.google.com/compute.
 You can access by using SSH. The server IP address can be changed if we restart the VM. Hence, have a look at "External IP" field of the server info panel.
 The working folder is /opt/notebook
