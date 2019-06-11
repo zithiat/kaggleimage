@@ -1,113 +1,91 @@
 import numpy as np
 from flask import Flask, abort, jsonify, request
-from json2html import *
 import pickle
+import pandas as pd
 import json
 
-# Demographic: popular pickle
-popular10 = pickle.load(open("/notebook/flask_app/popular10.pkl", "rb"))
-popular_output = popular10[['title', 'vote_count', 'vote_average', 'score']].head(10)
+def convert_int(x):
+    try:
+        return int(x)
+    except:
+        return np.nan
 
-# Content based: darkknight pickle
-darkknight = pickle.load(open("/notebook/flask_app/darknight.pkl", "rb"))
-darkknight_output = darkknight[['title']].head(10)
+    
+# demographic 
+popular_movies = pickle.load(open("/notebook/flask_app/demographic.pkl", "rb"))
 
-# Content based: superman pickle
-superman = pickle.load(open("/notebook/flask_app/superman.pkl", "rb"))
-superman_output = superman[['title']].head(10)
+# content-based
+df2 = pd.read_csv('/notebook/input/tmdb-movie-metadata/tmdb_5000_movies.csv')
+df2 = df2.reset_index()
+indices_content = pd.Series(df2.index, index=df2['title'])
+cosine_content = pickle.load(open("/notebook/flask_app/cosineContent.pkl", "rb"))
 
-# Content based: avatar pickle
-avatar = pickle.load(open("/notebook/flask_app/avatar.pkl", "rb"))
-avatar_output = avatar[['title']].head(10)
+# collaborative
+indices_collab = pickle.load(open("/notebook/flask_app/indicesCollab.pkl", "rb"))
+cosine_collab = pickle.load(open("/notebook/flask_app/cosineCollab.pkl", "rb"))
+svd = pickle.load(open("/notebook/flask_app/svdCollab.pkl", "rb"))
+smd = pickle.load(open("/notebook/flask_app/smdCollab.pkl", "rb"))
 
-# Collaborative based: 
-# u1_diehard
-u1diehard = pickle.load(open("/notebook/flask_app/u1_diehard.pkl", "rb"))
-u1diehard_output = u1diehard[['title', 'vote_count', 'vote_average', 'id', 'est']].head(10)
-
-# u101_avatar
-u101avatar = pickle.load(open("/notebook/flask_app/u101_avatar.pkl", "rb"))
-u101avatar_output = u101avatar[['title', 'vote_count', 'vote_average', 'id', 'est']].head(10)
-
-# u200_spartacus
-u200spartacus = pickle.load(open("/notebook/flask_app/u200_spartacus.pkl", "rb"))
-u200spartacus_output = u200spartacus[['title', 'vote_count', 'vote_average', 'id', 'est']].head(10)
+id_map = pd.read_csv('/notebook/input/the-movies-dataset/links_small.csv')[['movieId', 'tmdbId']]
+id_map['tmdbId'] = id_map['tmdbId'].apply(convert_int)
+id_map.columns = ['movieId', 'id']
+id_map = id_map.merge(smd[['title', 'id']], on='id').set_index('title')
+indices_map_collab = id_map.set_index('id')
 
 app = Flask(__name__)
 
-@app.route('/api/popular', methods=['GET'])
-def geographic_filter_api():
-    json = popular_output.to_json(orient='records')
-    print(json)
-    return json
+@app.route('/popular', methods=['GET'])
+def geographic_frilter():
+    output = popular_movies[['title', 'vote_count', 'vote_average', 'score']].head(10)
+    return output.to_json(orient='records')
 
-@app.route('/html/popular', methods=['GET'])
-def geographic_filter_html():
-    table = json2html.convert(popular_output.to_json(orient='records'))
-    print(table)
-    return table
 
-@app.route('/api/content', methods=['GET'])
-def content_filter_api():
+@app.route('/content', methods=['GET'])
+def content_filter():
     movie = request.args.get('movie')
-    print("Requested movie:", movie)
-    if movie == 'Dark Knight': 
-        out = darkknight_output.to_json(orient='records') 
-    elif movie == 'Superman': 
-        out = superman_output.to_json(orient='records')
-    elif movie == 'Avatar': 
-        out = avatar_output.to_json(orient='records')
-    else:
-        out = 'Not found'
-    print(out)
-    return out
-
-@app.route('/html/content', methods=['GET'])
-def content_filter_html():
-    movie = request.args.get('movie')
-    print("Requested movie:", movie)
-    if movie == 'Dark Knight': 
-        out = darkknight_output.to_json(orient='records') 
-    elif movie == 'Superman': 
-        out = superman_output.to_json(orient='records')
-    elif movie == 'Avatar': 
-        out = avatar_output.to_json(orient='records')
-    else:
-        out = 'Not found'
-    table = json2html.convert(out)
-    return table
+    output  = get_recommendations(movie)
+    return output.to_json(orient='records')
 
 
-@app.route('/api/collaborative', methods=['GET'])
-def collaborative_filter_api():
+@app.route('/collaborative', methods=['GET'])
+def collaborative_filter():
     userid = request.args.get('userid')
     movie = request.args.get('movie')
     print("Requested user:", userid, " and movie:", movie)
-    if userid == '1' and movie == 'Die Hard': 
-        out = u1diehard_output.to_json(orient='records') 
-    elif userid == '101' and movie == 'Avatar': 
-        out = u101avatar_output.to_json(orient='records')
-    elif userid == '200' and movie == 'Spartacus': 
-        out = u200spartacus_output.to_json(orient='records')
-    else:
-        out = 'Not found'
-    return out
+    output  = hybrid(userid, movie)
+    return output.to_json(orient='records')
 
-@app.route('/html/collaborative', methods=['GET'])
-def collaborative_filter_html():
-    userid = request.args.get('userid')
-    movie = request.args.get('movie')
-    print("Requested user:", userid, " and movie:", movie)
-    if userid == '1' and movie == 'Die Hard': 
-        out = u1diehard_output.to_json(orient='records') 
-    elif userid == '101' and movie == 'Avatar': 
-        out = u101avatar_output.to_json(orient='records')
-    elif userid == '200' and movie == 'Spartacus': 
-        out = u200spartacus_output.to_json(orient='records')
-    else:
-        out = 'Not found'
-    table = json2html.convert(out)
-    return table
+
+def get_recommendations(title):
+    # Get the index of the movie that matches the title
+    idx = indices_content[title]
+    # Get the pairwsie similarity scores of all movies with that movie
+    sim_scores = list(enumerate(cosine_content[int(idx)]))
+    # Sort the movies based on the similarity scores
+    sim_scores = sorted(sim_scores, key=lambda x: x[1], reverse=True)
+    # Get the scores of the 10 most similar movies
+    sim_scores = sim_scores[1:11]
+    # Get the movie indices
+    movie_indices = [i[0] for i in sim_scores]
+    # Return the top 10 most similar movies
+    return df2['title'].iloc[movie_indices]
+
+
+def hybrid(userId, title):
+    idx = indices_collab[title]
+    tmdbId = id_map.loc[title]['id']
+    #print(idx)
+    movie_id = id_map.loc[title]['movieId']
+    
+    sim_scores = list(enumerate(cosine_collab[int(idx)]))
+    sim_scores = sorted(sim_scores, key=lambda x: x[1], reverse=True)
+    sim_scores = sim_scores[1:26]
+    movie_indices = [i[0] for i in sim_scores]
+    
+    movies = smd.iloc[movie_indices][['title', 'vote_count', 'vote_average', 'id']]
+    movies['est'] = movies['id'].apply(lambda x: svd.predict(userId, indices_map_collab.loc[x]['movieId']).est)
+    movies = movies.sort_values('est', ascending=False)
+    return movies.head(10)
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0')
