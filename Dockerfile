@@ -17,6 +17,7 @@ COPY ./supervisord.conf /etc
 RUN pip install --upgrade pip
 RUN pip install flask flask_cors jsonify numpy pandas
 RUN pip install kaggle
+RUN pip install json2html
 
 # Setup Kaggle credentials
 RUN mkdir ~/.kaggle

@@ -41,4 +41,9 @@ It will be under port 5000.
 http://35.232.18.220:5000/
 
 
+3. The cloud API:
+/popular
+/movie=[movie_id]
+/user=[user_id]&movie=[movei_id]
+
 
