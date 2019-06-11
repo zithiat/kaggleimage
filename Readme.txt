@@ -44,6 +44,6 @@ http://35.232.18.220:5000/
 3. The cloud API:
 /api/popular
 /api/content?movie=
-/api/collaborative?user=[user_id]&movie=[movei_id]
+/api/collaborative?user=[user_id]&movie=[movie_id]
 
 
