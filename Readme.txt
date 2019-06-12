@@ -48,4 +48,6 @@ http://35.232.18.220:5000/
 /content?movie=
 /collaborative?user=[user_id]&movie=[movie_id]
 
+4. The Movie Recommendation App on Android: 
+https://github.com/Abdouraheem/MovieRecommendationApp
 
